@@ -8,6 +8,7 @@ A command line tool to scrape websites for email addresses.  It will follow all 
 
 - BeautifulSoup4
 - Selenium
+- Scrapy
 - PhantomJS
 
 ##Set-Up
@@ -54,6 +55,3 @@ support@udacity.com
 social@udacity.com
 media@udacity.com
 ```
-
-##To-Do
-- move to Scrapy for parallelization

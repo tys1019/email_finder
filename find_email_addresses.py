@@ -2,11 +2,15 @@ import argparse
 import requests
 
 from bs4 import BeautifulSoup
+from email_spider import run_spider
+from requests.exceptions import InvalidURL, ReadTimeout, ConnectionError
 from selenium import webdriver
+from scrapy.crawler import CrawlerProcess
+from scrapy.http import Request
+from scrapy.selector import Selector
+from scrapy.spiders import CrawlSpider
 from time import time
 from urlparse import urlparse
-from requests.exceptions import InvalidURL, ReadTimeout, ConnectionError
-
 
 parser = argparse.ArgumentParser(description='Find all email addresses on a domain.')
 parser.add_argument('domain', help="The web domain to search for email addresses (example.com)")
@@ -19,19 +23,12 @@ def make_url(url):
     url = url if url.startswith('http') else u"http://{}".format(url)
     return url
 
+DOMAIN_URL = make_url(DOMAIN)
+
 def get_html(url):
-    """Gets the HTML content for a website using selenium or requests."""
-
-    if args.browser:
-        driver.get(url)
-        return driver.page_source
-
-    else:
-        try:
-            request = requests.get(url, timeout=5)
-            return request.content
-        except (InvalidURL, ReadTimeout, ConnectionError) as e:
-            return ''
+    """Gets the HTML content for a website using selenium"""
+    driver.get(url)
+    return driver.page_source
 
 def get_mailto_links(soup):
     """
@@ -73,37 +70,41 @@ def get_follow_links(soup):
 
     return links
 
+def run_selenium():
+    # Build a running set of urls to visit, ones that have been visited and emails
+    try:
+        visited_urls = set()
+        all_urls = {DOMAIN_URL}
+        mailto_links = set()
 
-# Build a running set of urls to visit, ones that have been visited and emails
-try:
-    DOMAIN_URL = make_url(DOMAIN)
+        while all_urls - visited_urls:
+            for url in all_urls - visited_urls:
+                start = time()
+
+                html = get_html(url)
+                soup = BeautifulSoup(html, 'lxml')
+
+                all_urls.update(get_follow_links(soup))
+                mailto_links.update(get_mailto_links(soup))
+
+                visited_urls.add(url)
+
+                loading_time = round(time() - start, 2)
+
+                print u"{}. Loaded {} in {}s".format(len(visited_urls), url, loading_time)
+
+    except Exception, e:
+        raise e
+
+    finally:
+        driver.quit()
+        print u"Found these email addresses:\n{}".format('\n'.join(mailto_links))
+
+
+if __name__ == "__main__":
     if args.browser:
         driver = webdriver.PhantomJS()
+        run_selenium()
+    else:
+        run_spider(DOMAIN)
 
-    visited_urls = set()
-    all_urls = {DOMAIN_URL}
-    mailto_links = set()
-
-    while all_urls - visited_urls:
-        for url in all_urls - visited_urls:
-            start = time()
-
-            html = get_html(url)
-            soup = BeautifulSoup(html, 'lxml')
-
-            all_urls.update(get_follow_links(soup))
-            mailto_links.update(get_mailto_links(soup))
-
-            visited_urls.add(url)
-
-            loading_time = round(time() - start, 2)
-
-            print u"{}. Loaded {} in {}s".format(len(visited_urls), url, loading_time)
-
-except Exception, e:
-    raise e
-
-finally:
-    if args.browser:
-        driver.quit()
-    print u"Found these email addresses:\n{}".format('\n'.join(mailto_links))
